@@ -7,81 +7,41 @@
       </button>
     </header>
 
-    <div v-if="showPlaylistManager" class="playlist-manager">
-      <h2>Manage Playlists</h2>
-      <ul>
-        <li v-for="(playlist, index) in playlists" :key="index">
-          {{ playlist.name }} ({{ playlist.tracks.length }} tracks)
-          <button @click="selectPlaylist(index)">Select</button>
-          <button @click="deletePlaylist(index)" :disabled="selectedPlaylistIndex === index">Delete</button>
-        </li>
-      </ul>
-      <form @submit.prevent="createPlaylist">
-        <input v-model="newPlaylistName" placeholder="New Playlist Name" />
-        <button type="submit">Create</button>
-      </form>
-    </div>
+    <PlaylistManager v-if="showPlaylistManager" 
+                     :playlists="playlists" 
+                     :selectedPlaylistIndex="selectedPlaylistIndex" 
+                     @selectPlaylist="selectPlaylist" 
+                     @deletePlaylist="deletePlaylist" 
+                     @createPlaylist="createPlaylist" 
+                     :newPlaylistName="newPlaylistName"
+                     @update:newPlaylistName="newPlaylistName = $event" />
 
     <div v-else>
-      <div class="controls">
-        <p>Choose a track to start playing.</p>
-        <fieldset class="repeat-options">
-          <legend>Playback Options</legend>
-          <label>
-            <input type="radio" name="repeat" value="all" v-model="playbackMode"> Loop All
-          </label>
-          <label>
-            <input type="radio" name="repeat" value="single" v-model="playbackMode"> Loop Current
-          </label>
-          <label>
-            <input type="radio" name="repeat" value="off" v-model="playbackMode"> No Loop
-          </label>
-        </fieldset>
-        <div v-if="activeTrack" class="now-playing">
-          <p>Playing: <strong>{{ activeTrack }}</strong></p>
-        </div>
-        <div class="player-buttons">
-          <button @click="controlPlayback">{{ isPlaying ? 'Pause' : 'Start' }}</button>
-          <div class="timeline" @click="adjustProgress">
-            <div class="current-progress" :style="{ width: `${(currentTime / totalDuration) * 100}%` }"></div>
-          </div>
-          <span>{{ formatTime(currentTime) }}</span>
-        </div>
-      </div>
+      <Controls :playbackMode="playbackMode" 
+                :isPlaying="isPlaying" 
+                :currentTime="currentTime" 
+                :totalDuration="totalDuration" 
+                @controlPlayback="controlPlayback" 
+                @adjustProgress="adjustProgress" 
+                :activeTrack="activeTrack"
+                @update:playbackMode="playbackMode = $event" />
 
-      <section class="track-list">
-        <h2>Track List</h2>
-        <ul>
-          <li v-for="(item, idx) in tracks" :key="idx" :class="{ active: playingIndex === idx, invalid: item.invalid }">
-            {{ item.title }}
-            <div class="actions">
-              <button @click="startTrack(idx)" :disabled="item.invalid">Play</button>
-              <button @click="removeTrack(idx)">Remove</button>
-            </div>
-          </li>
-        </ul>
-        <p v-if="tracks.length === 0">Your track list is empty. Add some tracks!</p>
-      </section>
+      <TrackList :tracks="tracks" 
+                 :playingIndex="playingIndex" 
+                 @startTrack="startTrack" 
+                 @removeTrack="removeTrack" />
 
-      <section class="add-track">
-        <h2>Add a Track</h2>
-        <form @submit.prevent="addNewTrack">
-          <label for="input-type">Track Source:</label>
-          <select id="input-type" v-model="sourceType">
-            <option value="link">Via URL</option>
-            <option value="upload">Upload File</option>
-          </select>
-          <input v-if="sourceType === 'link'" type="text" placeholder="Enter track URL (must end with .mp3)">
-          <input v-if="sourceType === 'upload'" type="file" ref="fileUploader">
-          <button type="submit">{{ sourceType === 'link' ? 'Add Link' : 'Upload Track' }}</button>
-        </form>
-      </section>
+      <AddTrack :addNewTrack="addNewTrack" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, watch } from 'vue';
+import PlaylistManager from './components/PlaylistManager.vue';
+import Controls from './components/Controls.vue';
+import TrackList from './components/TrackList.vue';
+import AddTrack from './components/AddTrack.vue';
 
 const showPlaylistManager = ref(false);
 const playlists = ref(JSON.parse(localStorage.getItem('playlists')) || []);
@@ -105,24 +65,23 @@ const validateTrack = (track, index) => {
   audio.src = track.url;
 };
 
-const addNewTrack = () => {
-  if (sourceType.value === 'link') {
-    const urlInput = event.target.querySelector('input[type="text"]');
-    const url = urlInput?.value.trim();
+const addNewTrack = ({ type, url, file }) => {
+  if (type === 'link') {
     if (url && url.endsWith('.mp3')) {
       const newTrack = { title: url.split('/').pop(), url, invalid: false };
       tracks.value.push(newTrack);
       validateTrack(newTrack, tracks.value.length - 1);
-      urlInput.value = '';
       savePlaylists();
     } else {
       alert('Invalid URL. Please use a valid .mp3 link.');
     }
-  } else if (sourceType.value === 'upload') {
-    const file = fileUploader.value?.files[0];
+  } else if (type === 'upload') {
     if (file) {
       const fileURL = URL.createObjectURL(file);
-      tracks.value.push({ title: file.name, url: fileURL, invalid: false });
+      const newTrack = { title: file.name, url: fileURL, invalid: false };
+      tracks.value.push(newTrack);
+      validateTrack(newTrack, tracks.value.length - 1);
+      savePlaylists();
     } else {
       alert('Please choose a valid audio file.');
     }
@@ -231,6 +190,7 @@ watch(selectedPlaylistIndex, (newIndex) => {
   border-radius: 8px;
   max-width: 700px;
   margin: auto;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 header {
@@ -238,65 +198,23 @@ header {
   margin-bottom: 20px;
 }
 
-.controls {
-  margin-bottom: 20px;
+header h1 {
+  font-size: 2em;
+  margin: 0;
 }
 
-.player-buttons {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.timeline {
-  flex: 1;
-  height: 8px;
-  background-color: #ccc;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.current-progress {
-  height: 100%;
-  background-color: #4caf50;
-  width: 0;
-}
-
-.track-list ul {
-  list-style: none;
-  padding: 0;
-}
-
-.track-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: #fff;
-  margin-bottom: 10px;
-  padding: 8px;
-  border-radius: 4px;
-}
-
-.track-list .active {
-  font-weight: bold;
-  color: #2196f3;
-}
-
-.track-list .invalid {
-  text-decoration: line-through;
-  color: #e57373;
-}
-
-button {
-  padding: 8px 10px;
+header button {
+  padding: 10px 20px;
+  font-size: 1em;
+  border: none;
+  border-radius: 5px;
   background-color: #2196f3;
   color: white;
-  border: none;
-  border-radius: 4px;
   cursor: pointer;
+  transition: background-color 0.3s;
 }
 
-button:hover {
+header button:hover {
   background-color: #1976d2;
 }
 </style>
