@@ -2,7 +2,7 @@
 
 ## Binôme
 - EL BOUAZZAOUI Ali
-- BENAMMAR Rayen
+- BEN AMMAR Rayen
 
 ## Choix de conception et de réalisation
 Gestion des pistes audio :
